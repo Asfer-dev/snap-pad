@@ -3,11 +3,11 @@ version: "3.8"
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: notes_db
+    container_name: snap_pad_db
     environment:
       POSTGRES_USER: dev_user
       POSTGRES_PASSWORD: dev_password
-      POSTGRES_DB: notes_app_dev
+      POSTGRES_DB: snap_pad_app_dev
     ports:
       - "5432:5432"
     volumes:
