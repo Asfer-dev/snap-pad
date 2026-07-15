@@ -1,0 +1,27 @@
+openapi: 3.0.0
+info:
+  title: SnapPad API Docs
+  version: 1.0.0
+  description: Interactive API documentation for the SnapPad Markdown Note-taking Application
+servers:
+  - url: http://localhost:5000
+    description: Development Server
+paths:
+  /api/health:
+    get:
+      summary: Verify API health
+      description: Returns a simple success JSON structure to confirm the server is responsive.
+      responses:
+        '200':
+          description: Server is healthy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  message:
+                    type: string
+                    example: Welcome to the SnapPad API!
