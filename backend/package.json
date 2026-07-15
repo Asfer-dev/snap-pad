@@ -18,9 +18,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.3",
     "node-pg-migrate": "^8.0.4",
     "pg": "^8.22.0",
     "swagger-jsdoc": "^6.3.0",
@@ -28,9 +30,11 @@
     "yamljs": "^0.3.0"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.1.1",
     "@types/pg": "^8.20.0",
