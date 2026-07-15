@@ -1,7 +1,7 @@
 // backend/src/index.ts
-import dotenv from "dotenv";
-import express, { Request, Response } from "express";
-import { testDbConnection } from "./config/db";
+import dotenv from 'dotenv';
+import express, { Request, Response } from 'express';
+import { testDbConnection } from './config/db';
 
 dotenv.config();
 
@@ -15,8 +15,8 @@ app.use(express.json());
 testDbConnection();
 
 // A simple hello-world route
-app.get("/api/health", (req: Request, res: Response) => {
-  res.json({ status: "ok", message: "Welcome to the SnapPad API!" });
+app.get('/api/health', (req: Request, res: Response) => {
+  res.json({ status: 'ok', message: 'Welcome to the SnapPad API!' });
 });
 
 app.listen(PORT, () => {
