@@ -117,6 +117,116 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/folders:
+    post:
+      summary: Create a folder
+      security:
+        - BearerAuth: []
+      tags:
+        - Folders
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: Engineering Notes
+                parent_folder_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  example: null
+      responses:
+        '201':
+          description: Folder successfully created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Folder'
+        '400':
+          description: Invalid payload or bad parent assignment
+        '401':
+          description: Unauthorized
+    get:
+      summary: Retrieve all user folders
+      security:
+        - BearerAuth: []
+      tags:
+        - Folders
+      parameters:
+        - name: includeDeleted
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Folder'
+
+  /api/folders/{id}:
+    patch:
+      summary: Update folder details
+      security:
+        - BearerAuth: []
+      tags:
+        - Folders
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                parent_folder_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        '200':
+          description: Folder successfully updated
+        '403':
+          description: Forbidden - Not the owner
+        '404':
+          description: Folder not found
+    delete:
+      summary: Soft delete a folder recursively
+      security:
+        - BearerAuth: []
+      tags:
+        - Folders
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Folder successfully soft-deleted
+        '404':
+          description: Folder not found
+
 components:
   securitySchemes:
     BearerAuth:
@@ -152,3 +262,26 @@ components:
         error:
           type: string
           example: Email already registered.
+    Folder:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        user_id:
+          type: string
+          format: uuid
+        parent_folder_id:
+          type: string
+          format: uuid
+          nullable: true
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
