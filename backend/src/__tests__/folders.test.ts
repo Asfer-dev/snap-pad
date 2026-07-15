@@ -12,12 +12,19 @@ describe('Folder Endpoints', () => {
   let subFolderId: string;
 
   beforeAll(async () => {
-    // 1. Clean up folders and test users
-    await pool.query('DELETE FROM folders');
-    await pool.query('DELETE FROM users WHERE email IN ($1, $2)', [
+    // 1. Clean up tables - safely remove test data if previous runs left it
+    const existingUsers = await pool.query('SELECT id FROM users WHERE email IN ($1, $2)', [
       'usera@example.com',
       'userb@example.com',
     ]);
+    const existingUserIds = existingUsers.rows.map((row) => row.id);
+
+    if (existingUserIds.length > 0) {
+      // remove notes and folders that belong to these test users
+      await pool.query('DELETE FROM notes WHERE user_id = ANY($1)', [existingUserIds]);
+      await pool.query('DELETE FROM folders WHERE user_id = ANY($1)', [existingUserIds]);
+      await pool.query('DELETE FROM users WHERE id = ANY($1)', [existingUserIds]);
+    }
 
     // 2. Register User A
     const registerA = await request(app).post('/api/auth/register').send({
@@ -39,8 +46,19 @@ describe('Folder Endpoints', () => {
   });
 
   afterAll(async () => {
-    await pool.query('DELETE FROM folders');
-    await pool.query('DELETE FROM users WHERE id IN ($1, $2)', [userAId, userBId]);
+    // Safely remove any leftover test data for these users
+    const existingUsers = await pool.query('SELECT id FROM users WHERE email IN ($1, $2)', [
+      'usera@example.com',
+      'userb@example.com',
+    ]);
+    const existingUserIds = existingUsers.rows.map((row) => row.id);
+
+    if (existingUserIds.length > 0) {
+      await pool.query('DELETE FROM notes WHERE user_id = ANY($1)', [existingUserIds]);
+      await pool.query('DELETE FROM folders WHERE user_id = ANY($1)', [existingUserIds]);
+      await pool.query('DELETE FROM users WHERE id = ANY($1)', [existingUserIds]);
+    }
+
     await pool.end();
   });
 
