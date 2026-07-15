@@ -227,6 +227,132 @@ paths:
         '404':
           description: Folder not found
 
+  /api/notes:
+    post:
+      summary: Create a note
+      security:
+        - BearerAuth: []
+      tags:
+        - Notes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  example: My markdown note
+                content:
+                  type: string
+                  example: '# Hello World'
+                folder_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  example: null
+      responses:
+        '201':
+          description: Note successfully created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+    get:
+      summary: Retrieve all active notes
+      security:
+        - BearerAuth: []
+      tags:
+        - Notes
+      parameters:
+        - name: folder_id
+          in: query
+          required: false
+          schema:
+            type: string
+            nullable: true
+      responses:
+        '200':
+          description: List of notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Note'
+
+  /api/notes/{id}:
+    get:
+      summary: Get single note details
+      security:
+        - BearerAuth: []
+      tags:
+        - Notes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Success
+        '404':
+          description: Note not found
+    put:
+      summary: Update a note (Auto-save)
+      security:
+        - BearerAuth: []
+      tags:
+        - Notes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                content:
+                  type: string
+                folder_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        '200':
+          description: Note successfully updated
+        '404':
+          description: Note not found
+    delete:
+      summary: Soft delete a note
+      security:
+        - BearerAuth: []
+      tags:
+        - Notes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Note soft-deleted successfully
+        '404':
+          description: Note not found
+
 components:
   securitySchemes:
     BearerAuth:
@@ -274,6 +400,34 @@ components:
           type: string
           format: uuid
         parent_folder_id:
+          type: string
+          format: uuid
+          nullable: true
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Note:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: My First Note
+        content:
+          type: string
+          example: '# Welcome to SnapPad!'
+        user_id:
+          type: string
+          format: uuid
+        folder_id:
           type: string
           format: uuid
           nullable: true
