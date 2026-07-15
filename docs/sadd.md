@@ -55,6 +55,7 @@ erDiagram
   USERS {
     uuid id PK
     varchar email
+    varchar name
     varchar password_hash
     timestamptz created_at
     timestamptz updated_at
@@ -115,6 +116,16 @@ Represents the registered application users.
    <td>Unique, Not Null
    </td>
    <td>User's login email.
+   </td>
+  </tr>
+    <tr>
+   <td>name
+   </td>
+   <td>VARCHAR(120)
+   </td>
+   <td>Not Null
+   </td>
+   <td>User's display name.
    </td>
   </tr>
   <tr>
