@@ -25,15 +25,17 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', message: 'Welcome to the SnapPad API!' });
 });
 
-// A simple protected check route to test your middleware
-
 import authRoutes from './routes/authRoutes.js';
+import folderRoutes from './routes/folderRoutes.js';
+
+// A simple protected check route to test your middleware
 app.get('/api/protected-check', authMiddleware, (req, res) => {
   res.json({ message: 'Success!', userId: req.user?.id });
 });
 
 // Bind routes
 app.use('/api/auth', authRoutes);
+app.use('/api/folders', folderRoutes);
 
 app.listen(PORT, () => {
   console.log(`🚀 SnapPad backend running at http://localhost:${PORT}`);
