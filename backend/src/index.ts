@@ -5,10 +5,11 @@ import express, { Request, Response } from 'express';
 import swaggerUi from 'swagger-ui-express';
 import { testDbConnection } from './config/db.js';
 import { swaggerSpec } from './config/swagger.js';
+import { authMiddleware } from './middlewares/authMiddleware.js';
 
 dotenv.config();
 
-const app = express();
+export const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
@@ -23,6 +24,16 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', message: 'Welcome to the SnapPad API!' });
 });
+
+// A simple protected check route to test your middleware
+
+import authRoutes from './routes/authRoutes.js';
+app.get('/api/protected-check', authMiddleware, (req, res) => {
+  res.json({ message: 'Success!', userId: req.user?.id });
+});
+
+// Bind routes
+app.use('/api/auth', authRoutes);
 
 app.listen(PORT, () => {
   console.log(`🚀 SnapPad backend running at http://localhost:${PORT}`);
