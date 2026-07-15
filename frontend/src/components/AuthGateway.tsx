@@ -1,12 +1,15 @@
 // frontend/src/components/AuthGateway.tsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth'; // 👈 Import our Auth Context
 
 export const AuthGateway: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const { login } = useAuth(); // 👈 Destructure the global login setter
   const navigate = useNavigate();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -17,14 +20,15 @@ export const AuthGateway: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setIsLoading(true);
+    setIsLoading(false);
 
     const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
-    const payload = isLogin 
+    const payload = isLogin
       ? { email: formData.email, password: formData.password }
       : { name: formData.name, email: formData.email, password: formData.password };
 
     try {
+      setIsLoading(true);
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -37,12 +41,14 @@ export const AuthGateway: React.FC = () => {
         throw new Error(data.message || 'Something went wrong. Please try again.');
       }
 
-      // Persist the JWT token on success
-      if (data.token) {
-        localStorage.setItem('token', data.token);
+      // ✅ Secure sync: Update context, which automatically writes to localStorage & updates UI state
+      if (data.token && data.user) {
+        login(data.token, data.user);
+      } else {
+        throw new Error('Invalid response structure received from server.');
       }
 
-      // Redirect user to the dashboard
+      // Redirect user to their private dashboard workspace
       navigate('/dashboard');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
@@ -66,7 +72,9 @@ export const AuthGateway: React.FC = () => {
             {isLogin ? 'Sign In' : 'Create Account'}
           </h2>
           <p className="mt-2 text-sm text-neutral-500">
-            {isLogin ? 'to continue your work on SnapPad' : 'Get started with your clean workspace today'}
+            {isLogin
+              ? 'to continue your work on SnapPad'
+              : 'Get started with your clean workspace today'}
           </p>
         </div>
 
@@ -81,7 +89,10 @@ export const AuthGateway: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && (
             <div>
-              <label htmlFor="name" className="block text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-1">
+              <label
+                htmlFor="name"
+                className="block text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-1"
+              >
                 Full Name
               </label>
               <input
@@ -98,7 +109,10 @@ export const AuthGateway: React.FC = () => {
           )}
 
           <div>
-            <label htmlFor="email" className="block text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-1">
+            <label
+              htmlFor="email"
+              className="block text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-1"
+            >
               Email Address
             </label>
             <input
@@ -114,7 +128,10 @@ export const AuthGateway: React.FC = () => {
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-1">
+            <label
+              htmlFor="password"
+              className="block text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-1"
+            >
               Password
             </label>
             <input
@@ -144,7 +161,9 @@ export const AuthGateway: React.FC = () => {
             onClick={toggleAuthMode}
             className="text-blue-600 hover:text-blue-700 font-medium transition-colors"
           >
-            {isLogin ? "Don't have an account? Create an account" : 'Already have an account? Sign In'}
+            {isLogin
+              ? "Don't have an account? Create an account"
+              : 'Already have an account? Sign In'}
           </button>
         </div>
       </div>
