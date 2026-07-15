@@ -1,10 +1,11 @@
 // frontend/src/__tests__/AuthGateway.test.tsx
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthGateway } from '../components/AuthGateway';
+import { AuthProvider } from '../context/AuthProvider';
 
-// Mock useNavigate from react-router-dom
+// Mock useNavigate so we can assert redirection calls
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
@@ -14,97 +15,102 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-describe('AuthGateway Component Integration Tests', () => {
+describe('AuthGateway Component Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    // Mock globalThis fetch API
     globalThis.fetch = vi.fn();
   });
 
-  const renderComponent = () => {
+  // Helper helper to render the component with all required React Context Providers
+  const renderWithProviders = () => {
     return render(
-      <BrowserRouter>
-        <AuthGateway />
-      </BrowserRouter>,
+      <MemoryRouter>
+        <AuthProvider>
+          <AuthGateway />
+        </AuthProvider>
+      </MemoryRouter>,
     );
   };
 
   it('renders Sign In view by default and allows toggling to Create Account', async () => {
-    renderComponent();
+    renderWithProviders();
 
-    // Verify initial "Sign In" elements exist
+    // Check default state is Sign In
     expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument();
     expect(screen.queryByLabelText(/full name/i)).not.toBeInTheDocument();
 
-    // Find and click toggle link to change to Register view
-    const toggleLink = screen.getByText(/create an account/i);
-    fireEvent.click(toggleLink);
+    // Toggle mode
+    const toggleButton = screen.getByText(/don't have an account\?/i);
+    fireEvent.click(toggleButton);
 
-    // Verify "Create Account" elements now exist
+    // Assert change to Create Account
     expect(screen.getByRole('heading', { name: /create account/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/full name/i)).toBeInTheDocument();
   });
 
   it('updates form state values on typing input', () => {
-    renderComponent();
+    renderWithProviders();
 
     const emailInput = screen.getByLabelText(/email address/i) as HTMLInputElement;
     const passwordInput = screen.getByLabelText(/password/i) as HTMLInputElement;
 
-    fireEvent.change(emailInput, { target: { value: 'user@example.com' } });
-    fireEvent.change(passwordInput, { target: { value: 'password123' } });
+    fireEvent.change(emailInput, { target: { value: 'asfer@example.com' } });
+    fireEvent.change(passwordInput, { target: { value: 'securepassword' } });
 
-    expect(emailInput.value).toBe('user@example.com');
-    expect(passwordInput.value).toBe('password123');
+    expect(emailInput.value).toBe('asfer@example.com');
+    expect(passwordInput.value).toBe('securepassword');
   });
 
   it('shows error banner on 401 or 400 credentials mismatch', async () => {
-    // Mock API failing response
-    // Use vi.mocked to safely cast globalThis.fetch
     vi.mocked(globalThis.fetch).mockResolvedValueOnce({
       ok: false,
-      status: 401,
-      json: async () => ({ message: 'Invalid email or password' }),
-    } as Response); // Typecast the returned object to a standard Response interface
+      json: async () => ({ message: 'Invalid credentials' }),
+    } as Response);
 
-    renderComponent();
+    renderWithProviders();
 
-    fireEvent.change(screen.getByLabelText(/email address/i), {
-      target: { value: 'wrong@user.com' },
+    const emailInput = screen.getByLabelText(/email address/i);
+    const passwordInput = screen.getByLabelText(/password/i);
+    const submitButton = screen.getByRole('button', { name: /sign in/i });
+
+    fireEvent.change(emailInput, { target: { value: 'wrong@example.com' } });
+    fireEvent.change(passwordInput, { target: { value: 'wrongpass' } });
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Invalid credentials')).toBeInTheDocument();
     });
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'wrongpass' } });
-
-    const submitBtn = screen.getByRole('button', { name: /sign in/i });
-    fireEvent.click(submitBtn);
-
-    // Wait for the error banner to render with response message
-    const errorBanner = await screen.findByText(/invalid email or password/i);
-    expect(errorBanner).toBeInTheDocument();
   });
 
   it('persists JWT token to localStorage and redirects on successful auth', async () => {
-    // Mock successful login response containing our token
+    const mockUser = { id: 'usr-1', name: 'Asfer', email: 'asfer@example.com' };
+    const mockToken = 'mocked-jwt-token';
+
     vi.mocked(globalThis.fetch).mockResolvedValueOnce({
       ok: true,
-      status: 200,
-      json: async () => ({ token: 'mocked-jwt-token-xyz' }),
+      json: async () => ({
+        token: mockToken,
+        user: mockUser,
+      }),
     } as Response);
 
-    renderComponent();
+    renderWithProviders();
 
-    fireEvent.change(screen.getByLabelText(/email address/i), {
-      target: { value: 'user@example.com' },
-    });
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'securepass' } });
+    const emailInput = screen.getByLabelText(/email address/i);
+    const passwordInput = screen.getByLabelText(/password/i);
+    const submitButton = screen.getByRole('button', { name: /sign in/i });
 
-    const submitBtn = screen.getByRole('button', { name: /sign in/i });
-    fireEvent.click(submitBtn);
+    fireEvent.change(emailInput, { target: { value: 'asfer@example.com' } });
+    fireEvent.change(passwordInput, { target: { value: 'password123' } });
+    fireEvent.click(submitButton);
 
     await waitFor(() => {
-      // Assert token is persisted locally
-      expect(localStorage.getItem('token')).toBe('mocked-jwt-token-xyz');
-      // Assert it redirects to dashboard workspace
+      // Assert storage persistence (both token and parsed user info)
+      expect(localStorage.getItem('token')).toBe(mockToken);
+      expect(localStorage.getItem('user')).toContain('asfer@example.com');
+
+      // Assert navigation to dashboard occurred
       expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
     });
   });
