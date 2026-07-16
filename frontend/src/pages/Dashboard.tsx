@@ -2,10 +2,13 @@
 import React, { useEffect, useState } from 'react';
 import { EditorCanvas } from '../components/EditorCanvas';
 import { Sidebar } from '../components/Sidebar';
+import { useAuth } from '../hooks/useAuth';
 import type { RawFolder, RawNote } from '../types';
 import { buildSidebarTree } from '../utils/treeBuilder';
 
 export const Dashboard: React.FC = () => {
+  const { logout } = useAuth();
+
   const [folders, setFolders] = useState<RawFolder[]>([]);
   const [notes, setNotes] = useState<RawNote[]>([]);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
@@ -182,11 +185,6 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const handleSignOut = () => {
-    localStorage.removeItem('token');
-    window.location.reload();
-  };
-
   const activeNote = notes.find((n) => n.id === activeNoteId) || null;
 
   if (isLoading) {
@@ -222,7 +220,7 @@ export const Dashboard: React.FC = () => {
         onNoteSelect={(id) => setActiveNoteId(id)}
         onCreateNote={handleCreateNote}
         onCreateFolder={handleCreateFolder}
-        onSignOut={handleSignOut}
+        onSignOut={logout}
       />
 
       {/* Main Workspace Surface */}
