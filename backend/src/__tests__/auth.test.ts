@@ -18,7 +18,7 @@ describe('Auth Endpoints', () => {
   });
 
   describe('POST /api/auth/register', () => {
-    it('should successfully register a new user and return a token (201)', async () => {
+    it('should successfully register a new user and set a cookie (201)', async () => {
       const res = await request(app).post('/api/auth/register').send({
         name: 'Test User',
         email: 'testuser@example.com',
@@ -26,7 +26,12 @@ describe('Auth Endpoints', () => {
       });
 
       expect(res.status).toBe(201);
-      expect(res.body).toHaveProperty('token');
+      // 🛡️ Verify cookie is set instead of body token
+      expect(res.headers['set-cookie']).toBeDefined();
+      expect(res.headers['set-cookie'][0]).toContain('token=');
+      expect(res.headers['set-cookie'][0]).toContain('HttpOnly');
+
+      expect(res.body).not.toHaveProperty('token');
       expect(res.body.user).toHaveProperty('id');
       expect(res.body.user.name).toBe('Test User');
       expect(res.body.user.email).toBe('testuser@example.com');
@@ -76,14 +81,19 @@ describe('Auth Endpoints', () => {
   });
 
   describe('POST /api/auth/login', () => {
-    it('should successfully login and return a token (200)', async () => {
+    it('should successfully login and set an auth cookie (200)', async () => {
       const res = await request(app).post('/api/auth/login').send({
         email: 'testuser@example.com',
         password: 'SecurePassword123',
       });
 
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('token');
+      // 🛡️ Verify cookie is set
+      expect(res.headers['set-cookie']).toBeDefined();
+      expect(res.headers['set-cookie'][0]).toContain('token=');
+      expect(res.headers['set-cookie'][0]).toContain('HttpOnly');
+
+      expect(res.body).not.toHaveProperty('token');
       expect(res.body.user.email).toBe('testuser@example.com');
     });
 
@@ -99,26 +109,39 @@ describe('Auth Endpoints', () => {
   });
 
   describe('GET /api/protected-check (Middleware Check)', () => {
-    it('should deny access without a token (401)', async () => {
+    it('should deny access without a cookie (401)', async () => {
       const res = await request(app).get('/api/protected-check');
       expect(res.status).toBe(401);
     });
 
-    it('should allow access with a valid token (200)', async () => {
+    it('should allow access with a valid auth cookie (200)', async () => {
       // Get a fresh token by logging in
       const loginRes = await request(app).post('/api/auth/login').send({
         email: 'testuser@example.com',
         password: 'SecurePassword123',
       });
 
-      const token = loginRes.body.token;
+      // Extract cookie from headers array
+      const authCookie = loginRes.headers['set-cookie'];
 
-      const res = await request(app)
-        .get('/api/protected-check')
-        .set('Authorization', `Bearer ${token}`);
+      // Send request using cookie injection header
+      const res = await request(app).get('/api/protected-check').set('Cookie', authCookie); // 👈 Passes cookie array directly
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('userId');
+    });
+  });
+
+  describe('POST /api/auth/logout', () => {
+    it('should successfully clear the auth cookie on logout (200)', async () => {
+      const res = await request(app).post('/api/auth/logout');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('message', 'Logged out successfully');
+
+      // 🛡️ Verify server explicitly commands browser to wipe the value or expire it
+      expect(res.headers['set-cookie']).toBeDefined();
+      expect(res.headers['set-cookie'][0]).toMatch(/token=;|Expires=/);
     });
   });
 });

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { RawNote } from '../types';
+import { secureFetch } from '../utils/api';
 
 interface UseNoteDeletionParams {
   note: RawNote | null;
@@ -34,11 +35,8 @@ export const useNoteDeletion = ({ note, onNoteDelete }: UseNoteDeletionParams) =
     }
 
     try {
-      const response = await fetch(`/api/notes/${note.id}`, {
+      const response = await secureFetch(`/api/notes/${note.id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
       });
 
       if (!response.ok) {

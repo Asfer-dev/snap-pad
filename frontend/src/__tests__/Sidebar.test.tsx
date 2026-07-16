@@ -4,6 +4,17 @@ import { describe, expect, it, vi } from 'vitest';
 import { Sidebar } from '../components/Sidebar';
 import type { SidebarTree } from '../types';
 
+// 🛡️ Create a trackable spy function for our auth context logout call
+const mockLogout = vi.fn();
+
+// 🛡️ Mock the AuthContext hook completely so the Sidebar can read the user session state
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({
+    user: { id: 'usr-1', name: 'Asfer', email: 'asfer@example.com' },
+    logout: mockLogout,
+  }),
+}));
+
 describe('Sidebar Component UI Tests', () => {
   const mockTree: SidebarTree = {
     rootFolders: [
@@ -35,11 +46,10 @@ describe('Sidebar Component UI Tests', () => {
     onNoteSelect: vi.fn(),
     onCreateNote: vi.fn(),
     onCreateFolder: vi.fn(),
-    onSignOut: vi.fn(),
   };
 
   it('renders root notes and root folders, but hides nested folder contents by default', () => {
-    render(<Sidebar {...defaultProps} />);
+    render(<Sidebar {...defaultProps} onSignOut={mockLogout} />);
 
     // Root elements should be visible
     expect(screen.getByText('Quick Idea')).toBeInTheDocument();
@@ -51,7 +61,7 @@ describe('Sidebar Component UI Tests', () => {
   });
 
   it('expands a folder on click and reveals its subfolders and notes', () => {
-    render(<Sidebar {...defaultProps} />);
+    render(<Sidebar {...defaultProps} onSignOut={mockLogout} />);
 
     const folderHeader = screen.getByText('Travel');
 
@@ -72,7 +82,7 @@ describe('Sidebar Component UI Tests', () => {
 
   it('calls onNoteSelect when a note is clicked', () => {
     const onNoteSelectMock = vi.fn();
-    render(<Sidebar {...defaultProps} onNoteSelect={onNoteSelectMock} />);
+    render(<Sidebar {...defaultProps} onNoteSelect={onNoteSelectMock} onSignOut={mockLogout} />);
 
     const rootNote = screen.getByText('Quick Idea');
     fireEvent.click(rootNote);
@@ -80,17 +90,16 @@ describe('Sidebar Component UI Tests', () => {
     expect(onNoteSelectMock).toHaveBeenCalledWith('n_root');
   });
 
-  it('calls action callbacks when header buttons or sign-out is clicked', () => {
+  it('calls action callbacks when header buttons or context sign-out is clicked', () => {
     const onCreateNoteMock = vi.fn();
     const onCreateFolderMock = vi.fn();
-    const onSignOutMock = vi.fn();
 
     render(
       <Sidebar
+        onSignOut={mockLogout}
         {...defaultProps}
         onCreateNote={onCreateNoteMock}
         onCreateFolder={onCreateFolderMock}
-        onSignOut={onSignOutMock}
       />,
     );
 
@@ -102,8 +111,10 @@ describe('Sidebar Component UI Tests', () => {
     fireEvent.click(screen.getByTitle(/^new folder$/i));
     expect(onCreateFolderMock).toHaveBeenCalled();
 
-    // Trigger logout
+    // Trigger logout via the simulated UI click action
     fireEvent.click(screen.getByRole('button', { name: /sign out/i }));
-    expect(onSignOutMock).toHaveBeenCalled();
+
+    // 🛡️ Assert that our central hook's function was called rather than a leaky prop callback
+    expect(mockLogout).toHaveBeenCalled();
   });
 });

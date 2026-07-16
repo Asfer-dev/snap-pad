@@ -9,7 +9,7 @@ export const AuthGateway: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { login } = useAuth(); // 👈 Destructure the global login setter
+  const { login, isAuthenticated } = useAuth(); // 👈 Destructure the global login setter
   const navigate = useNavigate();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,12 +38,12 @@ export const AuthGateway: React.FC = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Something went wrong. Please try again.');
+        throw new Error(data.message || 'Invalid credentials. Please try again.');
       }
 
       // ✅ Secure sync: Update context, which automatically writes to localStorage & updates UI state
-      if (data.token && data.user) {
-        login(data.token, data.user);
+      if (data.user) {
+        login(data.user);
       } else {
         throw new Error('Invalid response structure received from server.');
       }
@@ -63,6 +63,15 @@ export const AuthGateway: React.FC = () => {
     setFormData({ name: '', email: '', password: '' });
   };
 
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard');
+    }
+  }, [isAuthenticated, navigate]);
+
+  if (isAuthenticated) {
+    return <div className="h-screen w-screen bg-neutral-50" />;
+  }
   return (
     <div className="flex items-center justify-center min-h-screen bg-neutral-50 px-4">
       <div className="w-full max-w-md p-8 bg-white border border-neutral-200 rounded-xl shadow-sm">

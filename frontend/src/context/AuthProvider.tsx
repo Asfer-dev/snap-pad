@@ -1,53 +1,63 @@
 // frontend/src/context/AuthProvider.tsx
 import React, { useEffect, useState } from 'react';
-import { AuthContext, type User } from './AuthContext'; // 👈 Import the context definition
+import { secureFetch } from '../utils/api'; // 👈 Import your credential-enabled fetch wrapper
+import { AuthContext, type User } from './AuthContext'; // Import the context definition
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // 1. Session verification handshake on application mount
   useEffect(() => {
     const initializeAuth = async () => {
-      const savedToken = localStorage.getItem('token');
-      const savedUser = localStorage.getItem('user');
+      try {
+        const response = await secureFetch('/api/protected-check');
 
-      if (savedToken && savedUser) {
-        try {
-          setToken(savedToken);
-          setUser(JSON.parse(savedUser));
-        } catch (err) {
-          console.error('Failed to parse local authentication payload', err);
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
+        if (response.ok) {
+          const data = await response.json();
+
+          // Construct the user object from your backend response
+          // Adjust this extraction based on your exact /api-docs configuration
+          if (data.user) {
+            setUser(data.user);
+          } else if (data.userId) {
+            setUser({ id: data.userId, name: '', email: '' });
+          }
+        } else {
+          setUser(null);
         }
+      } catch (err) {
+        console.error('Session verification handshake failed:', err);
+        setUser(null);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     initializeAuth();
   }, []);
 
-  const login = (newToken: string, newUser: User) => {
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('user', JSON.stringify(newUser));
-    setToken(newToken);
+  // 2. Updated login handler (cookie is set implicitly by backend)
+  const login = (newUser: User) => {
     setUser(newUser);
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setToken(null);
-    setUser(null);
+  // 3. Updated logout handler (calls API to clear the secure cookie)
+  const logout = async () => {
+    try {
+      await secureFetch('/api/auth/logout', { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to logout cleanly on backend:', err);
+    } finally {
+      setUser(null);
+    }
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        token,
-        isAuthenticated: !!token,
+        isAuthenticated: !!user,
         isLoading,
         login,
         logout,

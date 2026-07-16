@@ -3,18 +3,30 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { AuthProvider } from '../context/AuthProvider'; // 👈 FIX: Import from the correct file!
+import { AuthProvider } from '../context/AuthProvider';
+import { secureFetch } from '../utils/api';
+
+// 🛡️ Mock the universal secure API module entirely
+vi.mock('../utils/api', () => ({
+  secureFetch: vi.fn(),
+}));
 
 describe('Auth & Protected Routing Engine', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    localStorage.clear();
   });
 
   const MockDashboard = () => <div>Dashboard Workspace</div>;
   const MockLogin = () => <div>Login Page</div>;
 
-  it('redirects an unauthenticated user to /login', async () => {
+  it('redirects an unauthenticated user to /login when the network handshake fails', async () => {
+    // Simulate an unauthenticated state (401 Unauthorized or 404 No Session)
+    vi.mocked(secureFetch).mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'Unauthorized' }),
+    } as Response);
+
     render(
       <MemoryRouter initialEntries={['/dashboard']}>
         <AuthProvider>
@@ -33,19 +45,22 @@ describe('Auth & Protected Routing Engine', () => {
       </MemoryRouter>,
     );
 
+    // Assert that the component resolves loading and correctly kicks the user to login
     await waitFor(() => {
       expect(screen.getByText('Login Page')).toBeInTheDocument();
       expect(screen.queryByText('Dashboard Workspace')).not.toBeInTheDocument();
     });
   });
 
-  it('allows authenticated users with a token to access protected dashboard', async () => {
-    // Set both token and user so parsing doesn't throw an error during initialization
-    localStorage.setItem('token', 'mocked-valid-jwt-token');
-    localStorage.setItem(
-      'user',
-      JSON.stringify({ id: 'usr-1', name: 'Asfer', email: 'asfer@example.com' }),
-    );
+  it('allows authenticated users to access protected dashboard when handshake succeeds', async () => {
+    // Simulate a successful verification handshake returning the user session payload
+    vi.mocked(secureFetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        user: { id: 'usr-1', name: 'Asfer', email: 'asfer@example.com' },
+      }),
+    } as Response);
 
     render(
       <MemoryRouter initialEntries={['/dashboard']}>
@@ -65,7 +80,7 @@ describe('Auth & Protected Routing Engine', () => {
       </MemoryRouter>,
     );
 
-    // Wait for the useEffect initialization to finish (resolves loading -> renders workspace)
+    // Wait for the async API initialization to finish and confirm content is unshielded
     await waitFor(() => {
       expect(screen.getByText('Dashboard Workspace')).toBeInTheDocument();
       expect(screen.queryByText('Login Page')).not.toBeInTheDocument();
