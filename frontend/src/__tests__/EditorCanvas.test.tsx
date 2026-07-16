@@ -2,6 +2,12 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorCanvas } from '../components/EditorCanvas';
+import { secureFetch } from '../utils/api'; // 🛡️ Import our central secure API utility
+
+// 🛡️ Mock the universal secure API module entirely
+vi.mock('../utils/api', () => ({
+  secureFetch: vi.fn(),
+}));
 
 describe('EditorCanvas Component Tests', () => {
   const mockNote = {
@@ -21,21 +27,6 @@ describe('EditorCanvas Component Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    globalThis.fetch = vi.fn();
-    // Clean up local storage mocks if necessary
-    const localStorageMock = (() => {
-      let store: Record<string, string> = { token: 'mock-token' };
-      return {
-        getItem: (key: string) => store[key] || null,
-        setItem: (key: string, value: string) => {
-          store[key] = value;
-        },
-        clear: () => {
-          store = {};
-        },
-      };
-    })();
-    Object.defineProperty(window, 'localStorage', { value: localStorageMock, writable: true });
   });
 
   it('renders breadcrumbs and initial markdown content correctly', () => {
@@ -50,7 +41,8 @@ describe('EditorCanvas Component Tests', () => {
   });
 
   it('shows saving status and triggers debounced PUT API on content changes', async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValueOnce({
+    // 🛡️ Intercept secureFetch calls instead of global fetch
+    vi.mocked(secureFetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
       json: async () => ({ success: true }),
@@ -91,8 +83,8 @@ describe('EditorCanvas Component Tests', () => {
   it('calls the DELETE API and executes the callback on successful confirmation', async () => {
     const mockOnDelete = vi.fn();
 
-    // Mock the network response for a successful deletion
-    vi.mocked(globalThis.fetch).mockResolvedValueOnce({
+    // 🛡️ Mock secureFetch to intercept the internal application network request
+    vi.mocked(secureFetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
       json: async () => ({ success: true }),
@@ -107,12 +99,9 @@ describe('EditorCanvas Component Tests', () => {
     const confirmButton = screen.getByRole('button', { name: /yes, delete/i });
     fireEvent.click(confirmButton);
 
-    // Assert fetch was dispatched to the correct REST endpoint with authenticating headers
-    expect(globalThis.fetch).toHaveBeenCalledWith('/api/notes/n1', {
+    // 🛡️ Assert secureFetch was dispatched to the correct endpoint safely matching cookie-session mechanics
+    expect(secureFetch).toHaveBeenCalledWith('/api/notes/n1', {
       method: 'DELETE',
-      headers: {
-        Authorization: 'Bearer mock-token',
-      },
     });
 
     // Wait for the async task processing inside the component to fire the state callback

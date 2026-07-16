@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthGateway } from '../components/AuthGateway';
 import { AuthProvider } from '../context/AuthProvider';
+import { secureFetch } from '../utils/api';
 
 // Mock useNavigate so we can assert redirection calls
 const mockNavigate = vi.fn();
@@ -15,14 +16,47 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+// 🛡️ Mock the universal secure API module entirely
+vi.mock('../utils/api', () => ({
+  secureFetch: vi.fn(),
+}));
+
 describe('AuthGateway Component Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    localStorage.clear();
-    globalThis.fetch = vi.fn();
+
+    vi.restoreAllMocks();
+
+    // 🛡️ Intercept global fetch safely
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      // Intercept credentials mismatch scenario
+      if (url.includes('/api/auth/login')) {
+        // Parse the body to check for wrong credentials scenario if needed,
+        // or mock the failure explicitly for this test case block:
+        return {
+          ok: false,
+          status: 401,
+          json: async () => ({ message: 'Invalid credentials' }),
+        } as Response;
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ user: { name: 'Asfer' } }),
+      } as Response;
+    });
+
+    // By default, assume the user is unauthenticated during the initial handshake mount
+    vi.mocked(secureFetch).mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'No active session' }),
+    } as Response);
   });
 
-  // Helper helper to render the component with all required React Context Providers
+  // Helper to render the component with all required React Context Providers
   const renderWithProviders = () => {
     return render(
       <MemoryRouter>
@@ -63,9 +97,10 @@ describe('AuthGateway Component Tests', () => {
   });
 
   it('shows error banner on 401 or 400 credentials mismatch', async () => {
-    vi.mocked(globalThis.fetch).mockResolvedValueOnce({
+    // 🛡️ Mock the form submission endpoint response
+    vi.mocked(secureFetch).mockResolvedValueOnce({
       ok: false,
-      json: async () => ({ message: 'Invalid credentials' }),
+      json: async () => ({ error: 'Invalid credentials' }), // matches typical backend key structure
     } as Response);
 
     renderWithProviders();
@@ -83,14 +118,13 @@ describe('AuthGateway Component Tests', () => {
     });
   });
 
-  it('persists JWT token to localStorage and redirects on successful auth', async () => {
+  it('redirects to dashboard on successful auth without leaking credentials to storage', async () => {
     const mockUser = { id: 'usr-1', name: 'Asfer', email: 'asfer@example.com' };
-    const mockToken = 'mocked-jwt-token';
 
-    vi.mocked(globalThis.fetch).mockResolvedValueOnce({
+    // 🛡️ Mock submission endpoint (no token returned in body, cookie handles it implicitly)
+    vi.mocked(secureFetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        token: mockToken,
         user: mockUser,
       }),
     } as Response);
@@ -106,11 +140,32 @@ describe('AuthGateway Component Tests', () => {
     fireEvent.click(submitButton);
 
     await waitFor(() => {
-      // Assert storage persistence (both token and parsed user info)
-      expect(localStorage.getItem('token')).toBe(mockToken);
-      expect(localStorage.getItem('user')).toContain('asfer@example.com');
+      // 🛡️ Assert storage persistence is gone
+      expect(localStorage.getItem('token')).toBeNull();
+      expect(localStorage.getItem('user')).toBeNull();
 
       // Assert navigation to dashboard occurred
+      expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
+    });
+  });
+
+  // 🛡️ New Test: Ensure logged-in users get kicked out of the login screen
+  it('redirects an already authenticated user straight away from the gateway page', async () => {
+    // Reset standard mock to simulate a user who already has a valid cookie sitting in the browser
+    vi.mocked(secureFetch).mockReset();
+    vi.mocked(secureFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        user: { id: 'usr-1', name: 'Asfer', email: 'asfer@example.com' },
+      }),
+    } as Response);
+
+    renderWithProviders();
+
+    // The core initialization should complete, and your component's internal logic
+    // or your alternative routing layout (like the PublicRoute guardian) will push them out.
+    await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
     });
   });

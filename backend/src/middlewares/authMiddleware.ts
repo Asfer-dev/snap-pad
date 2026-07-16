@@ -9,14 +9,17 @@ interface DecodedToken {
 }
 
 export const authMiddleware = (req: Request, res: Response, next: NextFunction): void => {
-  const authHeader = req.headers.authorization;
+  // 1. Check for token in the cookies first, fallback to Auth header
+  let token = req.cookies.token;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Access denied. No token provided.' });
-    return;
+  if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+    token = req.headers.authorization.split(' ')[1];
   }
 
-  const token = authHeader.split(' ')[1];
+  if (!token) {
+    res.status(401).json({ error: 'Access denied. No authentication token provided.' });
+    return;
+  }
 
   try {
     const secret = process.env.JWT_SECRET || 'fallback_secret';

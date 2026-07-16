@@ -4,6 +4,7 @@ import { EditorCanvas } from '../components/EditorCanvas';
 import { Sidebar } from '../components/Sidebar';
 import { useAuth } from '../hooks/useAuth';
 import type { RawFolder, RawNote } from '../types';
+import { secureFetch } from '../utils/api';
 import { buildSidebarTree } from '../utils/treeBuilder';
 
 export const Dashboard: React.FC = () => {
@@ -30,17 +31,13 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  // Initialize and Fetch Initial Flat State
   useEffect(() => {
     const loadWorkspace = async () => {
       try {
+        // secureFetch automatically appends the base URL and injects your Authorization headers!
         const [foldersRes, notesRes] = await Promise.all([
-          fetch('/api/folders', {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-          }),
-          fetch('/api/notes', {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-          }),
+          secureFetch('/api/folders'),
+          secureFetch('/api/notes'),
         ]);
 
         if (!foldersRes.ok || !notesRes.ok) throw new Error('Could not fetch workspace data');

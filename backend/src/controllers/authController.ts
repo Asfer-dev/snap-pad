@@ -9,6 +9,14 @@ const generateToken = (userId: string): string => {
   return jwt.sign({ id: userId }, secret, { expiresIn: '24h' });
 };
 
+// Helper configuration for our secure cookie
+const COOKIE_OPTIONS = {
+  httpOnly: true, // Prevents client-side JS from reading the cookie
+  secure: process.env.NODE_ENV === 'production', // Sent only over HTTPS in production
+  sameSite: 'lax' as const, // Protects against CSRF
+  maxAge: 24 * 60 * 60 * 1000, // 24 hours in milliseconds
+};
+
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, email, password } = req.body;
@@ -39,10 +47,11 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const passwordHash = await bcrypt.hash(password, saltRounds);
     const user = await UserRepository.createUser(name, email, passwordHash);
 
-    // 4. Generate Token
+    // 4. Generate Token and set cookie
     const token = generateToken(user.id);
+    res.cookie('token', token, COOKIE_OPTIONS);
 
-    res.status(201).json({ user, token });
+    res.status(201).json({ user });
   } catch (error) {
     console.error('Registration Error:', error);
     res.status(500).json({ error: 'Internal server error.' });
@@ -72,15 +81,27 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // 3. Generate Token
+    // 3. Generate Token and set cookie
     const token = generateToken(user.id);
+    res.cookie('token', token, COOKIE_OPTIONS);
 
     // Strip hash before returning
     const { password_hash, ...userResponse } = user;
 
-    res.status(200).json({ user: userResponse, token });
+    res.status(200).json({ user: userResponse });
   } catch (error) {
     console.error('Login Error:', error);
     res.status(500).json({ error: 'Internal server error.' });
   }
+};
+
+export const logout = async (req: Request, res: Response): Promise<void> => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/', // Must match the path where the cookie was originally set
+  });
+
+  res.status(200).json({ message: 'Logged out successfully' });
 };

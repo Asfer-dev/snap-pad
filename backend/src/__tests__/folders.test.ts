@@ -4,8 +4,8 @@ import pool from '../config/db.js';
 import { app } from '../index.js';
 
 describe('Folder Endpoints', () => {
-  let userAToken: string;
-  let userBToken: string;
+  let userACookies: string[];
+  let userBCookies: string[];
   let userAId: string;
   let userBId: string;
   let rootFolderId: string;
@@ -26,22 +26,22 @@ describe('Folder Endpoints', () => {
       await pool.query('DELETE FROM users WHERE id = ANY($1)', [existingUserIds]);
     }
 
-    // 2. Register User A
+    // 2. Register User A and capture secure response cookies
     const registerA = await request(app).post('/api/auth/register').send({
       name: 'User A',
       email: 'usera@example.com',
       password: 'SecurePassword123',
     });
-    userAToken = registerA.body.token;
+    userACookies = registerA.headers['set-cookie'] as unknown as string[]; // 🛡️ Capture authentication cookie
     userAId = registerA.body.user.id;
 
-    // 3. Register User B
+    // 3. Register User B and capture secure response cookies
     const registerB = await request(app).post('/api/auth/register').send({
       name: 'User B',
       email: 'userb@example.com',
       password: 'SecurePassword123',
     });
-    userBToken = registerB.body.token;
+    userBCookies = registerB.headers['set-cookie'] as unknown as string[]; // 🛡️ Capture authentication cookie
     userBId = registerB.body.user.id;
   });
 
@@ -66,7 +66,7 @@ describe('Folder Endpoints', () => {
     it('should successfully create a root folder for User A (201)', async () => {
       const res = await request(app)
         .post('/api/folders')
-        .set('Authorization', `Bearer ${userAToken}`)
+        .set('Cookie', userACookies) // 🛡️ Pass secure cookie
         .send({
           name: 'Engineering Notes',
           parent_folder_id: null,
@@ -82,7 +82,7 @@ describe('Folder Endpoints', () => {
     it('should successfully create a nested subfolder under root folder (201)', async () => {
       const res = await request(app)
         .post('/api/folders')
-        .set('Authorization', `Bearer ${userAToken}`)
+        .set('Cookie', userACookies) // 🛡️ Pass secure cookie
         .send({
           name: 'Backend Architecture',
           parent_folder_id: rootFolderId,
@@ -98,7 +98,7 @@ describe('Folder Endpoints', () => {
 
       const res = await request(app)
         .post('/api/folders')
-        .set('Authorization', `Bearer ${userAToken}`)
+        .set('Cookie', userACookies) // 🛡️ Pass secure cookie
         .send({
           name: 'Orphaned Subfolder',
           parent_folder_id: nonExistentUuid,
@@ -111,7 +111,7 @@ describe('Folder Endpoints', () => {
     it("should prevent User B from nesting a folder inside User A's folder (400)", async () => {
       const res = await request(app)
         .post('/api/folders')
-        .set('Authorization', `Bearer ${userBToken}`)
+        .set('Cookie', userBCookies) // 🛡️ Pass secure cookie
         .send({
           name: 'Hacked Folder',
           parent_folder_id: rootFolderId,
@@ -124,9 +124,7 @@ describe('Folder Endpoints', () => {
 
   describe('GET /api/folders', () => {
     it('should return folders owned strictly by User A (200)', async () => {
-      const res = await request(app)
-        .get('/api/folders')
-        .set('Authorization', `Bearer ${userAToken}`);
+      const res = await request(app).get('/api/folders').set('Cookie', userACookies); // 🛡️ Pass secure cookie
 
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
@@ -134,9 +132,7 @@ describe('Folder Endpoints', () => {
     });
 
     it('should return an empty list for User B (200)', async () => {
-      const res = await request(app)
-        .get('/api/folders')
-        .set('Authorization', `Bearer ${userBToken}`);
+      const res = await request(app).get('/api/folders').set('Cookie', userBCookies); // 🛡️ Pass secure cookie
 
       expect(res.status).toBe(200);
       expect(res.body.length).toBe(0);
@@ -147,7 +143,7 @@ describe('Folder Endpoints', () => {
     it('should allow User A to rename their folder (200)', async () => {
       const res = await request(app)
         .patch(`/api/folders/${rootFolderId}`)
-        .set('Authorization', `Bearer ${userAToken}`)
+        .set('Cookie', userACookies) // 🛡️ Pass secure cookie
         .send({
           name: 'Updated Engineering Notes',
         });
@@ -159,7 +155,7 @@ describe('Folder Endpoints', () => {
     it("should prevent User B from modifying User A's folder (403/404)", async () => {
       const res = await request(app)
         .patch(`/api/folders/${rootFolderId}`)
-        .set('Authorization', `Bearer ${userBToken}`)
+        .set('Cookie', userBCookies) // 🛡️ Pass secure cookie
         .send({
           name: 'Malicious Rename',
         });
@@ -173,14 +169,12 @@ describe('Folder Endpoints', () => {
       // Delete parent folder
       const deleteRes = await request(app)
         .delete(`/api/folders/${rootFolderId}`)
-        .set('Authorization', `Bearer ${userAToken}`);
+        .set('Cookie', userACookies); // 🛡️ Pass secure cookie
 
       expect(deleteRes.status).toBe(200);
 
       // Verify it is hidden on standard read lookup
-      const listRes = await request(app)
-        .get('/api/folders')
-        .set('Authorization', `Bearer ${userAToken}`);
+      const listRes = await request(app).get('/api/folders').set('Cookie', userACookies); // 🛡️ Pass secure cookie
 
       expect(listRes.body.length).toBe(0);
     });
