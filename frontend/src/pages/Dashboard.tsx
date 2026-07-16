@@ -102,12 +102,9 @@ export const Dashboard: React.FC = () => {
     setErrorBanner(null);
 
     try {
-      const response = await fetch('/api/notes', {
+      const response = await secureFetch('/api/notes', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+
         body: JSON.stringify({
           title: 'Untitled Note',
           content: '',
@@ -156,12 +153,8 @@ export const Dashboard: React.FC = () => {
     setErrorBanner(null);
 
     try {
-      const response = await fetch('/api/folders', {
+      const response = await secureFetch('/api/folders', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
         body: JSON.stringify({
           name: folderName,
           parent_folder_id: null,
@@ -182,6 +175,91 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  // 3. Optimistic Folder Deletion (Recursive Cleanup)
+  const handleDeleteFolder = async (folderId: string) => {
+    // Helper to recursively collect all child folder IDs down the tree
+    const getAllChildFolderIds = (id: string, currentFolders: RawFolder[]): string[] => {
+      const children = currentFolders.filter((f) => f.parent_folder_id === id);
+      return [id, ...children.flatMap((c) => getAllChildFolderIds(c.id, currentFolders))];
+    };
+
+    // 1. Snapshot prior states for complete safety rollback coverage
+    const previousFolders = [...folders];
+    const previousNotes = [...notes];
+    const previousActiveNoteId = activeNoteId;
+
+    // 2. Identify all targets destined for eviction
+    const folderIdsToDelete = getAllChildFolderIds(folderId, folders);
+
+    // 3. Optimistically purge state targets synchronously
+    setFolders((prev) => prev.filter((f) => !folderIdsToDelete.includes(f.id)));
+    setNotes((prevNotes) => {
+      const filteredNotes = prevNotes.filter(
+        (n) => !n.folder_id || !folderIdsToDelete.includes(n.folder_id),
+      );
+
+      // Clear active note view layer instantly if it lived inside the targeted directory tree
+      const currentActiveStillExists = filteredNotes.some((n) => n.id === previousActiveNoteId);
+      if (!currentActiveStillExists) {
+        setActiveNoteId(null);
+      }
+      return filteredNotes;
+    });
+    setErrorBanner(null);
+
+    try {
+      const response = await secureFetch(`/api/folders/${folderId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) throw new Error('Server rejected folder deletion request');
+      // Success: State is already accurately tracking structural modifications
+    } catch (err) {
+      console.error(err);
+      // Rollback absolute integrity matching previous structural state snapshots
+      setFolders(previousFolders);
+      setNotes(previousNotes);
+      setActiveNoteId(previousActiveNoteId);
+      setErrorBanner('Failed to delete folder directory. Workspace state restored.');
+    }
+  };
+
+  // 4. Optimistic Folder Renaming
+  const handleRenameFolder = async (folderId: string, newFolderName: string) => {
+    const currentFolder = folders.find((f) => f.id === folderId);
+    if (!currentFolder) return;
+
+    if (
+      !newFolderName ||
+      newFolderName.trim() === '' ||
+      newFolderName.trim() === currentFolder.name
+    )
+      return;
+
+    const previousFolders = [...folders];
+
+    // Optimistically modify structural context array references natively
+    setFolders((prev) =>
+      prev.map((f) => (f.id === folderId ? { ...f, name: newFolderName.trim() } : f)),
+    );
+    setErrorBanner(null);
+
+    try {
+      const response = await secureFetch(`/api/folders/${folderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newFolderName.trim() }),
+      });
+
+      if (!response.ok)
+        throw new Error('Server rejected folder rename transaction tracking changes');
+    } catch (err) {
+      console.error(err);
+      // Fallback rollback processing implementation execution
+      setFolders(previousFolders);
+      setErrorBanner('Failed to save folder name modification. Rolled back state safely.');
+    }
+  };
   const activeNote = notes.find((n) => n.id === activeNoteId) || null;
 
   if (isLoading) {
@@ -218,6 +296,8 @@ export const Dashboard: React.FC = () => {
         onCreateNote={handleCreateNote}
         onCreateFolder={handleCreateFolder}
         onSignOut={logout}
+        onDeleteFolder={handleDeleteFolder}
+        onRenameFolder={handleRenameFolder}
       />
 
       {/* Main Workspace Surface */}

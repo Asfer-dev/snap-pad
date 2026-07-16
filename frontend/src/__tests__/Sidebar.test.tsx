@@ -46,6 +46,8 @@ describe('Sidebar Component UI Tests', () => {
     onNoteSelect: vi.fn(),
     onCreateNote: vi.fn(),
     onCreateFolder: vi.fn(),
+    onDeleteFolder: vi.fn(), // 👈 New prop dependency tracking injection
+    onRenameFolder: vi.fn(), // 👈 New prop dependency tracking injection
   };
 
   it('renders root notes and root folders, but hides nested folder contents by default', () => {
@@ -103,7 +105,7 @@ describe('Sidebar Component UI Tests', () => {
       />,
     );
 
-    // Use strict regex match (^ for start, $ for end) to target only the global button
+    // Use strict regex match to target only the global button
     fireEvent.click(screen.getByTitle(/^new note$/i));
     expect(onCreateNoteMock).toHaveBeenCalledWith(null);
 
@@ -116,5 +118,55 @@ describe('Sidebar Component UI Tests', () => {
 
     // 🛡️ Assert that our central hook's function was called rather than a leaky prop callback
     expect(mockLogout).toHaveBeenCalled();
+  });
+
+  // 🧪 NEW: Test Folder Renaming Options Menu
+  it('triggers prompt dialogue and calls onRenameFolder upon confirmation', () => {
+    const onRenameFolderMock = vi.fn();
+
+    // Stub browser window prompt environment interface execution mock
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Vacation Trips');
+
+    render(
+      <Sidebar {...defaultProps} onRenameFolder={onRenameFolderMock} onSignOut={mockLogout} />,
+    );
+
+    // 1. Open the 3-dot dropdown contextual options surface menu
+    const optionsButton = screen.getByTitle('Folder Options');
+    fireEvent.click(optionsButton);
+
+    // 2. Select rename row item interaction trigger execution
+    const renameActionItem = screen.getByText('Rename');
+    fireEvent.click(renameActionItem);
+
+    expect(promptSpy).toHaveBeenCalledWith('Rename folder to:', 'Travel');
+    expect(onRenameFolderMock).toHaveBeenCalledWith('f1', 'Vacation Trips');
+
+    promptSpy.mockRestore();
+  });
+
+  // 🧪 NEW: Test Folder Deletion Menu Context Confirmation
+  it('triggers window confirmation dialogue and drops directory targets on true approval', () => {
+    const onDeleteFolderMock = vi.fn();
+
+    // Stub native confirmation window dialogue interactions mapping execution context layers
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(
+      <Sidebar {...defaultProps} onDeleteFolder={onDeleteFolderMock} onSignOut={mockLogout} />,
+    );
+
+    // 1. Fire up the dropdown list layout menu configuration
+    const optionsButton = screen.getByTitle('Folder Options');
+    fireEvent.click(optionsButton);
+
+    // 2. Locate the Delete option action text target elements
+    const deleteActionItem = screen.getByText('Delete');
+    fireEvent.click(deleteActionItem);
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(onDeleteFolderMock).toHaveBeenCalledWith('f1');
+
+    confirmSpy.mockRestore();
   });
 });
