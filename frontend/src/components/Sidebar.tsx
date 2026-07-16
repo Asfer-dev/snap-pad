@@ -11,6 +11,8 @@ interface SidebarProps {
   onCreateNote: (folderId: string | null) => void;
   onCreateFolder: () => void;
   onSignOut: () => void;
+  onDeleteFolder: (folderId: string) => void;
+  onRenameFolder: (folderId: string, newName: string) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -21,6 +23,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCreateNote,
   onCreateFolder,
   onSignOut,
+  onDeleteFolder,
+  onRenameFolder,
 }) => {
   return (
     <div className="w-64 border-r border-neutral-200 bg-white h-screen flex flex-col justify-between">
@@ -59,6 +63,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               activeNoteId={activeNoteId}
               onNoteSelect={onNoteSelect}
               onCreateNote={(fId) => onCreateNote(fId)}
+              onDeleteFolder={onDeleteFolder}
+              onRenameFolder={onRenameFolder}
             />
           ))}
 
