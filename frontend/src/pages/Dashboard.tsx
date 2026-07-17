@@ -2,14 +2,18 @@
 import React, { useEffect, useState } from 'react';
 import { EditorCanvas } from '../components/EditorCanvas';
 import { Sidebar } from '../components/Sidebar';
+import { GET_WORKSPACE_TREE } from '../graphql/queries';
 import { useAuth } from '../hooks/useAuth';
 import type { RawFolder, RawNote } from '../types';
 import { secureFetch } from '../utils/api';
-import { buildSidebarTree } from '../utils/treeBuilder';
 
 export const Dashboard: React.FC = () => {
   const { logout } = useAuth();
 
+  const [tree, setTree] = useState<{
+    rootFolders: [];
+    rootNotes: [];
+  }>({ rootFolders: [], rootNotes: [] });
   const [folders, setFolders] = useState<RawFolder[]>([]);
   const [notes, setNotes] = useState<RawNote[]>([]);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
@@ -32,34 +36,43 @@ export const Dashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    const loadWorkspace = async () => {
+    const fetchWorkspace = async () => {
       try {
-        // secureFetch automatically appends the base URL and injects your Authorization headers!
-        const [foldersRes, notesRes] = await Promise.all([
-          secureFetch('/api/folders'),
-          secureFetch('/api/notes'),
-        ]);
+        setIsLoading(true);
 
-        if (!foldersRes.ok || !notesRes.ok) throw new Error('Could not fetch workspace data');
+        // GraphQL operations are ALWAYS POST requests to the singular /graphql endpoint
+        const response = await secureFetch('/graphql', {
+          method: 'POST',
 
-        const rawFolders: RawFolder[] = await foldersRes.json();
-        const rawNotes: RawNote[] = await notesRes.json();
+          body: JSON.stringify({
+            query: GET_WORKSPACE_TREE,
+          }),
+        });
 
-        setFolders(rawFolders);
-        setNotes(rawNotes);
-      } catch (err) {
-        console.error(err);
-        setErrorBanner('Failed to load your workspace data.');
+        const json = await response.json();
+
+        if (json.errors) {
+          console.error('GraphQL validation errors:', json.errors);
+          return;
+        }
+
+        // The response payload matches our schema structure natively!
+        // No client-side "buildSidebarTree" array processing function needed anymore.
+        const workspaceData = json.data.workspaceTree;
+        setTree(workspaceData);
+      } catch (error) {
+        console.error('Failed to load workspace payload:', error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadWorkspace();
+    fetchWorkspace();
   }, []);
 
-  // Compute Recursive Sidebar Structure
-  const sidebarTree = buildSidebarTree(folders, notes);
+  // Utility function to compute workspace tree when fetching from REST endpoints
+  // // Compute Recursive Sidebar Structure
+  // const sidebarTree = buildSidebarTree(folders, notes);
 
   // Derive Breadcrumbs for Active Note
   const getBreadcrumbs = (): string[] => {
@@ -289,7 +302,7 @@ export const Dashboard: React.FC = () => {
 
       {/* Left Sidebar */}
       <Sidebar
-        tree={sidebarTree}
+        tree={tree}
         activeNoteId={activeNoteId}
         userName="Asfer"
         onNoteSelect={(id) => setActiveNoteId(id)}
