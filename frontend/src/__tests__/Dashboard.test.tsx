@@ -1,15 +1,9 @@
 // frontend/src/__tests__/Dashboard.test.tsx
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { Dashboard } from '../pages/Dashboard';
-import { secureFetch } from '../utils/api';
 
-// 🛡️ Mock the universal secure API module entirely
-vi.mock('../utils/api', () => ({
-  secureFetch: vi.fn(),
-}));
-
-// 🛡️ Mock the useAuth hook to bypass context requirement
+// 🛡️ Mock the useAuth hook to bypass context requirements
 vi.mock('../hooks/useAuth', () => ({
   useAuth: () => ({
     user: { id: 'usr-1', name: 'Asfer', email: 'asfer@example.com' },
@@ -17,32 +11,43 @@ vi.mock('../hooks/useAuth', () => ({
   }),
 }));
 
-describe('Dashboard Workspace Controller - Optimistic UI Tests', () => {
-  beforeEach(() => {
-    // 🛡️ Use mockClear() instead of mockReset() to preserve the base mock interface skeleton
-    vi.mocked(secureFetch).mockClear();
+interface GraphQLRequestInterface {
+  query?: string;
+  variables?: Record<string, unknown>;
+}
 
-    // 🛡️ Establish a robust global fallback default implementation for all initial GET fetches
-    vi.mocked(secureFetch).mockImplementation(async (url) => {
-      if (url.includes('/api/folders')) {
-        return {
-          ok: true,
-          json: async () => [{ id: 'f_root', name: 'Work', parent_folder_id: null }],
-        } as Response;
+// Helper to construct mock GraphQL response payloads cleanly
+const mockGraphQLResponse = (data: Record<string, unknown>): Response =>
+  ({
+    ok: true,
+    json: async () => ({ data }),
+  }) as Response;
+
+describe('Dashboard Workspace Controller - GraphQL Optimistic UI Tests', () => {
+  let fetchMock: Mock;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    // 🛡️ Default implementation to catch the primary GraphQL workspace tree query
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const bodyString = typeof init?.body === 'string' ? init.body : '{}';
+      const body = JSON.parse(bodyString) as GraphQLRequestInterface;
+
+      if (url === '/graphql' && body.query?.includes('GetWorkspaceTree')) {
+        return mockGraphQLResponse({
+          workspaceTree: {
+            rootFolders: [{ id: 'f_root', name: 'Work', notes: [], subfolders: [] }],
+            rootNotes: [{ id: 'n_root', title: 'Scratchpad' }],
+          },
+        });
       }
-      if (url.includes('/api/notes')) {
-        return {
-          ok: true,
-          json: async () => [
-            { id: 'n_root', title: 'Scratchpad', content: 'test content', folder_id: null },
-          ],
-        } as Response;
-      }
-      return { ok: true, json: async () => [] } as Response;
+      return { ok: true, json: async () => ({}) } as Response;
     });
   });
 
-  it('renders initial notes and folders loaded from server', async () => {
+  it('renders initial notes and folders loaded from server via GraphQL', async () => {
     render(<Dashboard />);
 
     await waitFor(() => {
@@ -57,38 +62,43 @@ describe('Dashboard Workspace Controller - Optimistic UI Tests', () => {
       resolvePostPromise = resolve;
     });
 
-    // 🛡️ Intercept only the creation POST route, preserving the baseline initial GET routes
-    vi.mocked(secureFetch).mockImplementation(async (url, init) => {
+    // 🛡️ Intercept mutation/REST calls while preserving baseline GraphQL load paths
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const bodyString = typeof init?.body === 'string' ? init.body : '{}';
+      const body = JSON.parse(bodyString) as GraphQLRequestInterface;
+
+      // 1. Handle primary query loader step
+      if (url === '/graphql' && body.query?.includes('GetWorkspaceTree')) {
+        return mockGraphQLResponse({
+          workspaceTree: {
+            rootFolders: [{ id: 'f_root', name: 'Work', notes: [], subfolders: [] }],
+            rootNotes: [{ id: 'n_root', title: 'Scratchpad' }],
+          },
+        });
+      }
+
+      // 2. Intercept the Note mutation POST action
       if (url.includes('/api/notes') && init?.method === 'POST') {
         return postPromise;
       }
-      if (url.includes('/api/folders')) {
-        return {
-          ok: true,
-          json: async () => [{ id: 'f_root', name: 'Work', parent_folder_id: null }],
-        } as Response;
-      }
-      return {
-        ok: true,
-        json: async () => [
-          { id: 'n_root', title: 'Scratchpad', content: 'test content', folder_id: null },
-        ],
-      } as Response;
+
+      return { ok: true, json: async () => ({}) } as Response;
     });
 
     render(<Dashboard />);
 
-    // Wait for baseline dashboard shell mounting elements to resolve safely
+    // Wait for core elements to mount safely
     await screen.findByText('Scratchpad');
 
-    // Trigger Note Creation action via UI interaction
+    // Trigger creation
     const createNoteButton = screen.getByTitle('New Note');
     fireEvent.click(createNoteButton);
 
-    // Assert note is visible INSTANTLY (optimistic state UI checkpoint verification)
-    expect(screen.getByRole('textbox', { name: '' })).has.property('value', 'Untitled Note');
+    // Assert note is visible instantly (optimistic state verification)
+    const textbox = screen.getByRole('textbox') as HTMLInputElement | HTMLTextAreaElement;
+    expect(textbox.value).toBe('Untitled Note');
 
-    // Resolve structural payload transfer handshake processing confirmation
+    // Resolve the creation REST fetch promise handshake channel
     resolvePostPromise({
       ok: true,
       json: async () => ({
@@ -100,44 +110,43 @@ describe('Dashboard Workspace Controller - Optimistic UI Tests', () => {
     } as Response);
 
     await waitFor(() => {
-      expect(screen.getByRole('textbox', { name: '' })).has.property('value', 'Untitled Note');
+      const finalTextbox = screen.getByRole('textbox') as HTMLInputElement | HTMLTextAreaElement;
+      expect(finalTextbox.value).toBe('Untitled Note');
     });
   });
 
   it('rolls back state and displays error banner when creation fails', async () => {
-    // 🛡️ Intercept creation pathway to throw an explicit backend service degradation signal
-    vi.mocked(secureFetch).mockImplementation(async (url, init) => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const bodyString = typeof init?.body === 'string' ? init.body : '{}';
+      const body = JSON.parse(bodyString) as GraphQLRequestInterface;
+
+      if (url === '/graphql' && body.query?.includes('GetWorkspaceTree')) {
+        return mockGraphQLResponse({
+          workspaceTree: {
+            rootFolders: [{ id: 'f_root', name: 'Work', notes: [], subfolders: [] }],
+            rootNotes: [{ id: 'n_root', title: 'Scratchpad' }],
+          },
+        });
+      }
+
       if (url.includes('/api/notes') && init?.method === 'POST') {
-        return {
-          ok: false,
-          status: 500,
-        } as Response;
+        return { ok: false, status: 500 } as Response;
       }
-      if (url.includes('/api/folders')) {
-        return {
-          ok: true,
-          json: async () => [{ id: 'f_root', name: 'Work', parent_folder_id: null }],
-        } as Response;
-      }
-      return {
-        ok: true,
-        json: async () => [
-          { id: 'n_root', title: 'Scratchpad', content: 'test content', folder_id: null },
-        ],
-      } as Response;
+
+      return { ok: true, json: async () => ({}) } as Response;
     });
 
     render(<Dashboard />);
     await screen.findByText('Scratchpad');
 
-    // Click creation switch control handler
     const createNoteButton = screen.getByTitle('New Note');
     fireEvent.click(createNoteButton);
 
-    // 1. Instantly shown (optimistic checking verification)
-    expect(screen.getByRole('textbox', { name: '' })).has.property('value', 'Untitled Note');
+    // Instantly visible optimistically
+    const textbox = screen.getByRole('textbox') as HTMLInputElement | HTMLTextAreaElement;
+    expect(textbox.value).toBe('Untitled Note');
 
-    // 2. Wait for context stack unwinding sequence & transactional state cleanup execution check
+    // Asserts clear rollback execution cleanup handling block rules trigger
     await waitFor(() => {
       expect(screen.queryByText('Untitled Note')).not.toBeInTheDocument();
       expect(screen.getByText(/failed to create note/i)).toBeInTheDocument();

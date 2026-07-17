@@ -7,6 +7,11 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
+      '/graphql': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+        secure: false,
+      },
       // Intercept any call to /api and route it to our local backend port
       '/api': {
         target: 'http://localhost:5000', // Change this if your backend runs on a different port (e.g. 3000)

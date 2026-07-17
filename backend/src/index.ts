@@ -32,6 +32,8 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', message: 'Welcome to the SnapPad API!' });
 });
 
+import { createHandler } from 'graphql-http/lib/use/express';
+import { workspaceResolvers, workspaceSchema } from './graphql/schema.js';
 import authRoutes from './routes/authRoutes.js';
 import folderRoutes from './routes/folderRoutes.js';
 import noteRoutes from './routes/noteRoutes.js';
@@ -45,6 +47,19 @@ app.get('/api/protected-check', authMiddleware, (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/notes', noteRoutes);
+
+// Mount the single /graphql router pipeline securely behind your token auth
+app.all(
+  '/graphql',
+  authMiddleware,
+  createHandler({
+    schema: workspaceSchema,
+    rootValue: workspaceResolvers,
+    // Pass the express request context layer through to allow the resolver to read context.req.user
+    // graphql-http passes a wrapper request object; the real Express request is available on req.raw
+    context: (req) => ({ req: req.raw }),
+  }),
+);
 
 app.listen(PORT, () => {
   console.log(`🚀 SnapPad backend running at http://localhost:${PORT}`);
