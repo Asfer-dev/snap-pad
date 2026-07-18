@@ -3,7 +3,6 @@ import { EditorContent } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import React from 'react';
 import { useNoteAutosave } from '../hooks/useNoteAutosave';
-import { useNoteDeletion } from '../hooks/useNoteDeletion';
 import { useNoteEditor } from '../hooks/useNoteEditor';
 import type { RawNote } from '../types';
 
@@ -11,14 +10,12 @@ interface EditorCanvasProps {
   note: RawNote | null;
   breadcrumbs: string[];
   onNoteUpdate?: (updatedNote: RawNote) => void;
-  onNoteDelete?: (noteId: string) => void;
 }
 
 export const EditorCanvas: React.FC<EditorCanvasProps> = ({
   note,
   breadcrumbs,
   onNoteUpdate,
-  onNoteDelete,
 }) => {
   const { title, saveStatus, handleTitleChange, handleTitleBlur, scheduleContentAutosave } =
     useNoteAutosave({
@@ -28,10 +25,6 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
   const { editor, getMarkdown } = useNoteEditor({
     note,
     onMarkdownChange: scheduleContentAutosave,
-  });
-  const { isDeleting, beginDelete, cancelDelete, handleDelete } = useNoteDeletion({
-    note,
-    onNoteDelete,
   });
 
   if (!note) {
@@ -51,47 +44,6 @@ export const EditorCanvas: React.FC<EditorCanvasProps> = ({
             {idx < breadcrumbs.length - 1 && <span>&gt;</span>}
           </React.Fragment>
         ))}
-      </div>
-
-      <div className="flex items-center space-x-2 text-xs">
-        {isDeleting ? (
-          <div className="flex items-center space-x-1.5">
-            <span className="text-neutral-500 font-medium">Delete permanently?</span>
-            <button
-              onClick={handleDelete}
-              className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white font-semibold rounded transition-colors"
-            >
-              Yes, Delete
-            </button>
-            <button
-              onClick={cancelDelete}
-              className="px-2.5 py-1 bg-neutral-100 hover:bg-neutral-200 text-neutral-600 font-medium rounded transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={beginDelete}
-            className="text-neutral-400 hover:text-red-500 font-medium transition-colors p-1"
-            title="Delete Note"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4.5 w-4.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              />
-            </svg>
-          </button>
-        )}
       </div>
 
       <div className="flex-1 overflow-y-auto px-12 py-8">

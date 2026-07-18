@@ -1,5 +1,7 @@
 // frontend/src/pages/Dashboard.tsx
 import React, { useEffect, useState } from 'react';
+import { DotLottieReact } from '@lottiefiles/dotlottie-react';
+import notesAnimation from '../assets/notes.lottie?url';
 import { EditorCanvas } from '../components/EditorCanvas';
 import { Sidebar } from '../components/Sidebar';
 import { useAuth } from '../hooks/useAuth';
@@ -21,13 +23,31 @@ export const Dashboard: React.FC = () => {
     setNotes((prev) => prev.map((n) => (n.id === updatedNote.id ? updatedNote : n)));
   };
 
-  const handleNoteDelete = (deletedNoteId: string) => {
+  const removeNoteFromState = (deletedNoteId: string) => {
     // 1. Remove deleted note from state
     setNotes((prevNotes) => prevNotes.filter((note) => note.id !== deletedNoteId));
 
     // 2. Deselect active note so the canvas defaults to the blank state
     if (activeNoteId === deletedNoteId) {
       setActiveNoteId(null);
+    }
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    try {
+      const response = await secureFetch(`/api/notes/${noteId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete note');
+      }
+
+      removeNoteFromState(noteId);
+      setErrorBanner(null);
+    } catch (error) {
+      console.error(error);
+      setErrorBanner('Failed to delete note. Please try again.');
     }
   };
 
@@ -135,14 +155,14 @@ export const Dashboard: React.FC = () => {
   };
 
   // 2. Optimistic Folder Creation
-  const handleCreateFolder = async () => {
-    const folderName = window.prompt('Enter folder name:');
-    if (!folderName) return;
+  const handleCreateFolder = async (folderName: string) => {
+    const trimmedFolderName = folderName.trim();
+    if (!trimmedFolderName) return;
 
     const tempId = `temp-folder-${Date.now()}`;
     const newOptimisticFolder: RawFolder = {
       id: tempId,
-      name: folderName,
+      name: trimmedFolderName,
       parent_folder_id: null,
     };
 
@@ -156,7 +176,7 @@ export const Dashboard: React.FC = () => {
       const response = await secureFetch('/api/folders', {
         method: 'POST',
         body: JSON.stringify({
-          name: folderName,
+          name: trimmedFolderName,
           parent_folder_id: null,
         }),
       });
@@ -297,6 +317,7 @@ export const Dashboard: React.FC = () => {
         onCreateFolder={handleCreateFolder}
         onSignOut={logout}
         onDeleteFolder={handleDeleteFolder}
+        onDeleteNote={handleDeleteNote}
         onRenameFolder={handleRenameFolder}
       />
 
@@ -308,11 +329,17 @@ export const Dashboard: React.FC = () => {
           note={activeNote}
           breadcrumbs={getBreadcrumbs()}
           onNoteUpdate={handleNoteUpdate}
-          onNoteDelete={handleNoteDelete}
         />
       ) : (
-        <div className="flex-1 flex items-center justify-center text-neutral-400 text-sm bg-white">
-          Select a note to begin editing.
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-neutral-600 text-sm">
+          <DotLottieReact
+            src={notesAnimation}
+            loop
+            autoplay
+            aria-label="Notes animation"
+            className="h-48 w-48"
+          />
+          <span>Select a note to begin editing.</span>
         </div>
       )}
     </div>

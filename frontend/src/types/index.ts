@@ -34,3 +34,14 @@ export interface SidebarTree {
   rootFolders: FolderNode[];
   rootNotes: NoteNode[];
 }
+
+export interface FolderItemProps {
+  folder: FolderNode;
+  activeNoteId: string | null;
+  onNoteSelect: (id: string) => void;
+  onCreateNote: (folderId: string) => void;
+  onDeleteFolder: (folderId: string) => void;
+  onRequestDeleteNote: (note: NoteNode) => void;
+  onRenameFolder: (folderId: string, newName: string) => void;
+  depth?: number;
+}

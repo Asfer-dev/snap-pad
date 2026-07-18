@@ -1,5 +1,5 @@
 // frontend/src/__tests__/Sidebar.test.tsx
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Sidebar } from '../components/Sidebar';
 import type { SidebarTree } from '../types';
@@ -47,6 +47,7 @@ describe('Sidebar Component UI Tests', () => {
     onCreateNote: vi.fn(),
     onCreateFolder: vi.fn(),
     onDeleteFolder: vi.fn(), // 👈 New prop dependency tracking injection
+    onDeleteNote: vi.fn(),
     onRenameFolder: vi.fn(), // 👈 New prop dependency tracking injection
   };
 
@@ -92,26 +93,52 @@ describe('Sidebar Component UI Tests', () => {
     expect(onNoteSelectMock).toHaveBeenCalledWith('n_root');
   });
 
+  it('opens a delete dialog from a root note row and cancels without deleting', () => {
+    const onDeleteNoteMock = vi.fn();
+
+    render(<Sidebar {...defaultProps} onDeleteNote={onDeleteNoteMock} onSignOut={mockLogout} />);
+
+    fireEvent.click(screen.getByTitle('Delete Quick Idea'));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Delete note?')).toBeInTheDocument();
+    expect(screen.getByText(/permanently delete "Quick Idea"/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(onDeleteNoteMock).not.toHaveBeenCalled();
+  });
+
+  it('confirms note deletion from the sidebar dialog', async () => {
+    const onDeleteNoteMock = vi.fn();
+
+    render(<Sidebar {...defaultProps} onDeleteNote={onDeleteNoteMock} onSignOut={mockLogout} />);
+
+    fireEvent.click(screen.getByTitle('Delete Quick Idea'));
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
+
+    await waitFor(() => {
+      expect(onDeleteNoteMock).toHaveBeenCalledWith('n_root');
+    });
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it('calls action callbacks when header buttons or context sign-out is clicked', () => {
     const onCreateNoteMock = vi.fn();
-    const onCreateFolderMock = vi.fn();
 
     render(
       <Sidebar
         onSignOut={mockLogout}
         {...defaultProps}
         onCreateNote={onCreateNoteMock}
-        onCreateFolder={onCreateFolderMock}
       />,
     );
 
     // Use strict regex match to target only the global button
     fireEvent.click(screen.getByTitle(/^new note$/i));
     expect(onCreateNoteMock).toHaveBeenCalledWith(null);
-
-    // Do the same for the folder button to prevent any future collisions
-    fireEvent.click(screen.getByTitle(/^new folder$/i));
-    expect(onCreateFolderMock).toHaveBeenCalled();
 
     // Trigger logout via the simulated UI click action
     fireEvent.click(screen.getByRole('button', { name: /sign out/i }));
@@ -120,53 +147,117 @@ describe('Sidebar Component UI Tests', () => {
     expect(mockLogout).toHaveBeenCalled();
   });
 
-  // 🧪 NEW: Test Folder Renaming Options Menu
-  it('triggers prompt dialogue and calls onRenameFolder upon confirmation', () => {
-    const onRenameFolderMock = vi.fn();
+  it('opens the create folder dialog and cancels without creating', () => {
+    const onCreateFolderMock = vi.fn();
 
-    // Stub browser window prompt environment interface execution mock
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Vacation Trips');
+    render(
+      <Sidebar
+        {...defaultProps}
+        onCreateFolder={onCreateFolderMock}
+        onSignOut={mockLogout}
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle(/^new folder$/i));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Create folder')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(onCreateFolderMock).not.toHaveBeenCalled();
+  });
+
+  it('creates a folder from the dialog name field', async () => {
+    const onCreateFolderMock = vi.fn();
+
+    render(
+      <Sidebar
+        {...defaultProps}
+        onCreateFolder={onCreateFolderMock}
+        onSignOut={mockLogout}
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle(/^new folder$/i));
+    fireEvent.change(screen.getByPlaceholderText('Folder name'), {
+      target: { value: 'Ideas' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+    await waitFor(() => {
+      expect(onCreateFolderMock).toHaveBeenCalledWith('Ideas');
+    });
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('opens a rename folder dialog and calls onRenameFolder upon confirmation', async () => {
+    const onRenameFolderMock = vi.fn();
 
     render(
       <Sidebar {...defaultProps} onRenameFolder={onRenameFolderMock} onSignOut={mockLogout} />,
     );
 
-    // 1. Open the 3-dot dropdown contextual options surface menu
     const optionsButton = screen.getByTitle('Folder Options');
     fireEvent.click(optionsButton);
 
-    // 2. Select rename row item interaction trigger execution
     const renameActionItem = screen.getByText('Rename');
     fireEvent.click(renameActionItem);
 
-    expect(promptSpy).toHaveBeenCalledWith('Rename folder to:', 'Travel');
-    expect(onRenameFolderMock).toHaveBeenCalledWith('f1', 'Vacation Trips');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Rename folder')).toBeInTheDocument();
 
-    promptSpy.mockRestore();
+    const folderNameInput = screen.getByDisplayValue('Travel');
+    fireEvent.change(folderNameInput, { target: { value: 'Vacation Trips' } });
+    fireEvent.click(screen.getByRole('button', { name: /^rename$/i }));
+
+    await waitFor(() => {
+      expect(onRenameFolderMock).toHaveBeenCalledWith('f1', 'Vacation Trips');
+    });
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  // 🧪 NEW: Test Folder Deletion Menu Context Confirmation
-  it('triggers window confirmation dialogue and drops directory targets on true approval', () => {
+  it('opens a delete folder dialog and cancels without deleting', () => {
     const onDeleteFolderMock = vi.fn();
-
-    // Stub native confirmation window dialogue interactions mapping execution context layers
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     render(
       <Sidebar {...defaultProps} onDeleteFolder={onDeleteFolderMock} onSignOut={mockLogout} />,
     );
 
-    // 1. Fire up the dropdown list layout menu configuration
     const optionsButton = screen.getByTitle('Folder Options');
     fireEvent.click(optionsButton);
 
-    // 2. Locate the Delete option action text target elements
     const deleteActionItem = screen.getByText('Delete');
     fireEvent.click(deleteActionItem);
 
-    expect(confirmSpy).toHaveBeenCalled();
-    expect(onDeleteFolderMock).toHaveBeenCalledWith('f1');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Delete folder?')).toBeInTheDocument();
+    expect(screen.getByText(/permanently delete "Travel"/i)).toBeInTheDocument();
 
-    confirmSpy.mockRestore();
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(onDeleteFolderMock).not.toHaveBeenCalled();
+  });
+
+  it('confirms folder deletion from the delete folder dialog', async () => {
+    const onDeleteFolderMock = vi.fn();
+
+    render(
+      <Sidebar {...defaultProps} onDeleteFolder={onDeleteFolderMock} onSignOut={mockLogout} />,
+    );
+
+    fireEvent.click(screen.getByTitle('Folder Options'));
+    fireEvent.click(screen.getByText('Delete'));
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
+
+    await waitFor(() => {
+      expect(onDeleteFolderMock).toHaveBeenCalledWith('f1');
+    });
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
